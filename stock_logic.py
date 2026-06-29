@@ -53,8 +53,13 @@ def analyze_dividend_stock(stock_data):
     is_uptrend = current_price > last_sma200 if not pd.isna(last_sma200) else True
 
     # --- 2. วิเคราะห์เชิงพื้นฐานปันผล (Dividend Analysis) ---
-    # หาผลรวมปันผลที่จ่ายในปีล่าสุด (ย้อนหลัง 365 วันล่าสุด)
-    latest_year_div = dividends.last('365D').sum() if not dividends.empty else 0
+    if not dividends.empty:
+        # หาวันที่ล่าสุดที่มีข้อมูล แล้วถอยหลังไป 365 วัน (รองรับ Pandas เวอร์ชันใหม่)
+        cutoff_date = dividends.index[-1] - pd.Timedelta(days=365)
+        # นำยอดปันผลเฉพาะช่วง 1 ปีล่าสุดมารวมกัน
+        latest_year_div = dividends[dividends.index >= cutoff_date].sum()
+    else:
+        latest_year_div = 0
     
     # คำนวณอัตราส่วนปันผลปัจจุบัน (Dividend Yield %)
     div_yield = (latest_year_div / current_price) * 100 if current_price > 0 else 0
