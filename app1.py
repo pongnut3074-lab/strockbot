@@ -1,78 +1,79 @@
 import streamlit as st
 import plotly.graph_objects as go
-from stock_logic import get_stock_data, analyze_dividend_stock
+from plotly.subplots import make_subplots
+from stock_logic import get_stock_data, analyze_dividend_stock, get_ai_insight
 
-# 1. ตั้งค่าหน้าเว็บให้เป็นแบบกว้าง (Wide Mode) เพื่อความสวยงามของแดชบอร์ด
-st.set_page_config(page_title="Dividend Stock Bot", layout="wide", page_icon="🍫")
+st.set_page_config(page_title="AI Dividend Stock Bot", layout="wide", page_icon="🧠")
 
-# หัวข้อหลักของหน้าเว็บ
-st.title("🤖 Dividend Stock Analysis Bot")
-st.markdown("บอทวิเคราะห์หุ้นปันผลอัจฉริยะ ผสมผสานกลยุทธ์เชิงเทคนิค (SMA 200) และเชิงพื้นฐาน (Dividend Yield)")
+st.title("🧠 AI Dividend Stock Analyst")
+st.markdown("ผู้ช่วยวิเคราะห์หุ้นปันผลระดับสถาบันการเงิน ผสานพลัง Data Science (RSI, MACD) และ Google Gemini AI")
 st.write("---")
 
-# 2. ส่วนแถบด้านข้าง (Sidebar) สำหรับรับค่าจากผู้ใช้
 st.sidebar.header("🔍 ค้นหาหุ้น")
-# ช่องกรอกชื่อหุ้น (กำหนดค่าเริ่มต้นเป็น KO หรือ Coca-Cola)
 ticker_input = st.sidebar.text_input("กรอกรหัสหุ้นต่างประเทศ (Ticker):", value="KO").strip().upper()
-
-# ปุ่มกดสำหรับเริ่มคำนวณ
 search_button = st.sidebar.button("เริ่มวิเคราะห์ข้อมูล")
 
-# 3. ส่วนการประมวลผลหลักเมื่อผู้ใช้กดปุ่ม หรือเปิดหน้าเว็บครั้งแรก
 if ticker_input:
-    with st.spinner(f"🤖 บอทกำลังดึงข้อมูลและวิเคราะห์หุ้น {ticker_input} โปรดรอสักครู่..."):
-        # เรียกใช้ฟังก์ชันดึงข้อมูลจากไฟล์ stock_logic.py
+    with st.spinner(f"⏳ บอทกำลังดึงข้อมูลและให้ AI วิเคราะห์หุ้น {ticker_input}..."):
         stock_data = get_stock_data(ticker_input)
         
-        if stock_data and not stock_data["hist"].empty:
-            # สั่งให้สมองของบอทคำนวณคำแนะนำ
+        if stock_data and not stock_data.get("hist").empty:
             analysis = analyze_dividend_stock(stock_data)
+            ai_summary = get_ai_insight(ticker_input, stock_data, analysis)
             
-            # --- ส่วนแสดงผลบนเว็บ ---
-            # แสดงชื่อบริษัทเด่นๆ
-            st.header(f"🏢 {stock_data['company_name']} ({ticker_input})")
+            # แสดงชื่อบริษัท
+            st.header(f"🏢 {stock_data.get('company_name', ticker_input)} ({ticker_input})")
             
-            # แบ่งหน้าจอเป็น 3 คอลัมน์สำหรับโชว์ตัวเลขสรุปสำคัญ (KPI Cards)
-            col1, col2, col3 = st.columns(3)
+            # แสดงกล่องสรุปสถานะการลงทุนด่วน
+            st.success(f"📌 **ผลการประเมินจากระบบ:** {analysis.get('status')} ({analysis.get('reason')})")
+            
+            # แสดง Dashboard ตัวเลขสำคัญ
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric(label="ราคาปัจจุบัน (USD)", value=f"${stock_data['current_price']:.2f}")
+                st.metric(label="ราคาปัจจุบัน", value=f"${stock_data.get('current_price', 0):.2f}")
             with col2:
-                st.metric(label="อัตราปันผลปัจจุบัน (Dividend Yield)", value=f"{analysis['div_yield']:.2f}%")
+                st.metric(label="Dividend Yield", value=f"{analysis.get('div_yield', 0):.2f}%")
             with col3:
-                st.metric(label="เงินปันผลรวมรอบ 1 ปีล่าสุด", value=f"${analysis['latest_year_div']:.2f}")
+                st.metric(label="RSI (14 Days)", value=f"{analysis.get('rsi', 0):.1f}")
+            with col4:
+                beta_val = stock_data.get('beta', 'N/A')
+                if isinstance(beta_val, (int, float)):
+                    beta_display = f"{beta_val:.2f}"
+                else:
+                    beta_display = str(beta_val)
+                st.metric(label="Beta (ความผันผวน)", value=beta_display)
             
-            # แสดงกล่องคำแนะนำจากบอท (สรุปผลอัจฉริยะ)
-            st.subheader("🤖 ผลการวิเคราะห์จากบอท")
-            # ถ้าเป็นกลุ่มน่าสะสมให้ขึ้นแถบสีเขียว (Success) ถ้าให้หลีกเลี่ยงให้ขึ้นแถบสีแดง (Error) นอกนั้นสีฟ้า (Info)
-            if "น่าสะสม" in analysis['status']:
-                st.success(f"**สถานะ:** {analysis['status']}\n\n**เหตุผล:** {analysis['reason']}")
-            elif "หลีกเลี่ยง" in analysis['status']:
-                st.error(f"**สถานะ:** {analysis['status']}\n\n**เหตุผล:** {analysis['reason']}")
-            else:
-                st.info(f"**...สถานะ:** {analysis['status']}\n\n**เหตุผล:** {analysis['reason']}")
-                
             st.write("---")
             
-            # --- ส่วนการวาดกราฟเทคนิคด้วย Plotly ---
-            st.subheader("📈 กราฟราคาหุ้นพร้อมเส้นค่าเฉลี่ย SMA 200 วัน")
+            # ส่วนแสดงบทวิเคราะห์ของ AI
+            st.subheader("🤖 บทวิเคราะห์เชิงลึกจาก AI (Executive Summary)")
+            st.info(ai_summary)
             
+            st.write("---")
+            
+            # ส่วนแสดงกราฟเทคนิคเชิงลึก
+            st.subheader("📈 กราฟราคาเทคนิค และ RSI Momentum")
             hist = stock_data["hist"]
-            # สร้างกราฟราคาปิด (Line Chart)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], name='ราคาปิด (Close)', line=dict(color='#8B5A2B', width=2)))
-            # เพิ่มเส้น SMA 200 วันเข้าไปในกราฟเดียวกันเพื่อเปรียบเทียบเทรนด์
-            fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA200'], name='เส้น SMA 200 วัน', line=dict(color='#FF9900', width=1.5, dash='dash')))
             
-            # ตกแต่งหน้าตากราฟ ซูมเข้าออกได้ มีปุ่มลากแถบเวลาด้านล่าง
-            fig.update_layout(
-                xaxis_title="วันที่",
-                yaxis_title="ราคาหุ้น (USD)",
-                hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=20, r=20, t=20, b=20)
-            )
-            # แสดงกราฟลงบนหน้าเว็บ Streamlit
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
+            
+            # กราฟราคาหลัก + เส้น SMA 200
+            fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], name='Close Price', line=dict(color='#2980B9', width=2)), row=1, col=1)
+            if 'SMA200' in hist.columns:
+                fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA200'], name='SMA 200', line=dict(color='#F39C12', width=1.5, dash='dash')), row=1, col=1)
+            
+            # กราฟ RSI
+            if 'RSI' in hist.columns:
+                fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], name='RSI (14)', line=dict(color='#8E44AD', width=1.5)), row=2, col=1)
+            
+            fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1, annotation_text="Overbought")
+            fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1, annotation_text="Oversold")
+            
+            fig.update_layout(height=500, hovermode="x unified", margin=dict(l=20, r=20, t=20, b=20))
+            fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
+            fig.update_yaxes(title_text="RSI", range=[0, 100], row=2, col=1)
+            
             st.plotly_chart(fig, use_container_width=True)
             
         else:
-            st.error(f"❌ ไม่พบข้อมูลสำหรับหุ้นรหัส '{ticker_input}' กรุณาตรวจสอบตัวย่อตัวอักษรอีกครั้งครับ")
+            st.error(f"❌ ไม่พบข้อมูลสำหรับหุ้นรหัส '{ticker_input}' กรุณาตรวจสอบตัวย่อหุ้นอีกครั้ง")
